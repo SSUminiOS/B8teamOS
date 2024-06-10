@@ -123,3 +123,4 @@ int main() {
 void print_minios(char* str) {
         printf("%s\n",str);
 }
+//ㅇㅇ

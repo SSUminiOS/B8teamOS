@@ -2,88 +2,77 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libgen.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <readline/readline.h>
 #include <readline/history.h>
-
-#include "system.h"
-#include "syscall.h"
 #include "filesystem.h"
 #include "process.h"
+#include "round_robin.h"
+#include "createfile.h"
+#include "deletefile.h"
+#include "writefile.h"
+#include "createdir.h"
+#include "deletedir.h"
 
 extern Process process_table[MAX_PROCESSES];
 extern int process_count;
+
 Process *current_process;
 
 void print_minios(char* str);
-
-void run_test_process() {
-    printf("Starting process test...\n");
-
-    // 프로세스 생성 (fork)
-    pid_t pid = fork();
-    if (pid < 0) {
-        fprintf(stderr, "Fork Failed\n");
-        return;
-    } else if (pid == 0) {
-        // 자식 프로세스: 새로운 프로그램 실행 (exec)
-        printf("In child process. PID: %d\n", getpid());
-        if (execlp("/bin/echo", "echo", "Hello from child process!", NULL) == -1) {
-            perror("Exec failed");
-        }
-        _exit(1);  // Exec 실패 시 자식 프로세스 종료
-    } else {
-        // 부모 프로세스: 자식 프로세스 기다림 (wait)
-        printf("In parent process. PID: %d, Child PID: %d\n", getpid(), pid);
-        int status;
-        if (waitpid(pid, &status, 0) == -1) {
-            perror("waitpid failed");
-        } else {
-            printf("Child process %d terminated with status %d\n", pid, status);
-        }
-    }
-
-    printf("Process test completed.\n");
-}
+void ipc_example();
+void *monte_carlo(void *arg);
+void compute_pi();
+void minisystem();
 
 int main() {
     print_minios("[MiniOS SSU] Hello, World!");
 
+    initialize_file_system();
+
+    current_process = create_process("init", 0);
+
     char *input;
-    char server_input[20]; // 서버 주소를 저장할 변수
-    char port_input[10];   // 포트 번호를 저장할 변수
-    
-    while(1) {
-        // readline을 사용하여 입력 받기
+
+    while (1) {
         input = readline("커맨드를 입력하세요(종료:exit) : ");
 
-        if (strcmp(input,"exit") == 0) {
+        if (strcmp(input, "exit") == 0) {
             break;
         }
 
-        else if (strcmp(input,"minisystem") == 0) {
+        if (strcmp(input, "minisystem") == 0) {
             minisystem();
         }
-        
-        //현우
-        else if (strcmp(input,"time") ==0) {
-            get_time();
+        else if (strcmp(input, "fork") == 0) {
+            Process *new_process = fork_process(current_process);
+            if (new_process == NULL) {
+                printf("Error forking process.\n");
+            } else {
+                printf("Process forked with PID %d.\n", new_process->pid);
+            }
         }
-        
-        else if (strcmp(input,"monitoring_memory") ==0) {
-            monitoring_memory();
-            return 0;
+        else if (strcmp(input, "ipc") == 0) {
+            ipc_example();
         }
-        
-        else if (strcmp(input,"monitoring_cpu") ==0) {
-            monitoring_cpu();
-            return 0;
+        else if (strcmp(input, "pi") == 0) {
+            compute_pi();
         }
-        
-        //지민
+        else if (strcmp(input, "round_robin") == 0) {
+            Process processes[] = {
+                {1, "P1", READY, 10, 0, {0}, NULL, 0, 10},
+                {2, "P2", READY, 5, 0, {0}, NULL, 1, 5},
+                {3, "P3", READY, 8, 0, {0}, NULL, 2, 8},
+                {4, "P4", READY, 3, 0, {0}, NULL, 3, 3},
+                {5, "P5", READY, 6, 0, {0}, NULL, 4, 6},
+                {6, "P6", READY, 7, 0, {0}, NULL, 5, 7},
+                {7, "P7", READY, 4, 0, {0}, NULL, 6, 4},
+                {8, "P8", READY, 9, 0, {0}, NULL, 7, 9}
+            };
+            int n = sizeof(processes) / sizeof(processes[0]);
+            int quantum = 3;
+
+            round_robin(processes, n, quantum);
+        }
         else if (strcmp(input, "createfile") == 0) {
             char filepath[256];
             printf("Enter filename: ");
@@ -203,108 +192,19 @@ int main() {
                 printf("Written %zd bytes to file descriptor %d.\n", bytes_written, fd);
             }
         }
-        
-        //인아
-        else if (strcmp(input, "IPC_write") == 0) {
-            IPC_W();
-        }
-        
-        else if (strcmp(input, "IPC_read") == 0) {
-            IPC_R();
-        }
-        
-        else if (strcmp(input,"Server") == 0){
-            printf("어떤 포트 번호를 사용할까요? ");
-            fgets(port_input, sizeof(port_input), stdin);
-            port_input[strlen(port_input) - 1] = '\0'; 
-            char *argv[] = {"Server", port_input}; 
-            socket_server(2, argv);
-            printf("서버를 생성했어요. Clinet를 기다립니다.");
-        } 
-        
-        else if (strcmp(input,"Client") == 0){
-            printf("어떤 서버 IP 주소를 사용할까요? ");
-            fgets(server_input, sizeof(server_input), stdin);
-            server_input[strlen(server_input) - 1] = '\0'; 
-            printf("어떤 포트 번호를 사용할까요? ");
-            fgets(port_input, sizeof(port_input), stdin);
-            port_input[strlen(port_input) - 1] = '\0'; 
-            char *client_argv[] = {"Client", server_input, port_input}; 
-            socket_client(3, client_argv);
-            printf("서버에 들어왔어요.");
-        } 
-        
-        //준영
-        else if (strcmp(input, "fork") == 0) {
-            Fork();
-        }
-        
-        else if (strcmp(input, "exec") == 0) {
-            Exec();
-        } 
-        
-        else if (strcmp(input, "abort") == 0) {
-            Abort();
-        }
-        
-        else if (strcmp(input, "exit_program") == 0) {
-            int status;
-            printf("Enter exit status: ");
-            scanf("%d", &status);
-            Exit(status);
-        }
-        
-        else if (strcmp(input, "wait_time") == 0) {
-            int seconds;
-            printf("Enter wait time in seconds: ");
-            scanf("%d", &seconds);
-            wait_time(seconds);  
-        }
-        
-        else if (strcmp(input, "wait_event") == 0) {
-            wait_for_event();
-        }
-        
-        else if (strcmp(input, "signal_event") == 0) {
-            signal_event();
-        }
-        
-        else if (strcmp(input, "kill") == 0) {
-            pid_t pid;
-            int sig;
-            printf("Enter PID: ");
-            scanf("%d", &pid);
-            printf("Enter signal: ");
-            scanf("%d", &sig);
-            Kill(pid, sig);
-        }
-        
-        else if (strcmp(input, "getpid") == 0) {
-            GetPID();
-        }
-        
-        else if (strcmp(input, "getppid") == 0) {
-            GetPPID();
-        }
-        
-        else if (strcmp(input, "wait") == 0) {
-            Wait();
-        }
-        
-        else if (strcmp(input, "test_process") == 0) {
-            run_test_process();
+        else {
+            system(input);
         }
 
-        else system(input);
-}
+        free(input);
+    }
 
-    // 메모리 해제
-    free(input);
     print_minios("[MiniOS SSU] MiniOS Shutdown........");
 
-    return(1);
+    return 1;
 }
 
 void print_minios(char* str) {
-        printf("%s\n",str);
+    printf("%s\n", str);
 }
+
